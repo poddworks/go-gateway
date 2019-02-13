@@ -1,0 +1,36 @@
+{
+  "name": "@go-gateway/node-rpc",
+  "version": "1.0.0",
+  "main": "dist/AmqpClient.js",
+  "files": [
+    "dist/",
+    "LICENSE",
+    "README.md"
+  ],
+  "dependencies": {
+    "amqplib": "^0.5.2",
+    "promise-retry": "^1.1.1",
+    "rxjs": "^5.5.6"
+  },
+  "devDependencies": {
+    "babel-cli": "^6.26.0",
+    "babel-plugin-transform-remove-console": "^6.9.0",
+    "babel-preset-env": "^1.6.1"
+  },
+  "scripts": {
+    "build": "babel src/ -d dist/ --copy-files",
+    "clean": "rm -rf dist/"
+  },
+  "babel": {
+    "env": {
+      "production": {
+        "plugins": [
+          "transform-remove-console"
+        ],
+        "presets": [
+          [ "env", { "targets": { "node": "8" } }]
+        ]
+      }
+    }
+  }
+}
