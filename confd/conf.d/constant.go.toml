@@ -1,0 +1,5 @@
+[template]
+src = "constant.go.tmpl"
+dest = "cli/constant.go"
+keys = [
+]

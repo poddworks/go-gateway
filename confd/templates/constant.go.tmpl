@@ -1,0 +1,15 @@
+package cli
+
+const (
+	// VersionString is the git describe version set at
+	// build time
+    VersionString = "{{ getenv "GATEWAY_API_VER" "?" }}"
+
+	// RevisionString is the git revision set at
+	// build time
+    RevisionString = "{{ getenv "GATEWAY_API_GIT_HASH" "?" }}"
+
+	// GoVersionString is the Golang revision set at
+	// build time
+    GoVersionString = "{{ getenv "GATEWAY_API_GO_VER" "?" }}"
+)
