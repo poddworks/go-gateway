@@ -3,7 +3,7 @@
 all: linux
 
 clean:
-	rm -f gateway-api gateway-api-Linux-*
+	rm -f go-gateway go-gateway-Linux-*
 
 GIT_HASH := $(shell git rev-parse --short HEAD)
 GO_VER := $(shell go version | cut -d ' ' -f 3)
@@ -12,7 +12,7 @@ config:
 	env GATEWAY_API_VER=$(VER) GATEWAY_API_GIT_HASH=$(GIT_HASH) GATEWAY_API_GO_VER=$(GO_VER) confd -log-level error -backend env -confdir ./confd/ -onetime
 
 linux-native: config
-	go build -o gateway-api ./cmd
+	go build -o go-gateway ./cmd
 
 linux: config
-	env CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o gateway-api-Linux-x86_64 ./cmd
+	env CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o go-gateway-Linux-x86_64 ./cmd
