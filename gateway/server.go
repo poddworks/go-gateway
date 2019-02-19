@@ -41,7 +41,7 @@ func EnableFunction() error {
 
 func loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		logger.WithFields(log.Fields{"request": r.Context().Value(MessageCtxString)}).Info("request-log")
+		logger.WithFields(log.Fields{"request": r.Context().Value(MessageCtxString)}).Debug("request-log")
 		next.ServeHTTP(w, r)
 	})
 }
@@ -90,6 +90,9 @@ func bodyMiddleware(next http.Handler) http.Handler {
 }
 
 func Init() error {
+	// Shoudl be configured via command line args
+	log.SetLevel(log.DebugLevel)
+
 	router = mux.NewRouter()
 
 	// Setup middleware
