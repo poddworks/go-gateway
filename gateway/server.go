@@ -11,6 +11,8 @@ import (
 	"github.com/gorilla/mux"
 	. "github.com/poddworks/go-gateway/gateway-api/message"
 	log "github.com/sirupsen/logrus"
+
+	client "github.com/poddworks/go-gateway/gateway-api/rpc/go"
 )
 
 var (
@@ -18,6 +20,8 @@ var (
 
 	router *mux.Router
 	logger = log.WithFields(log.Fields{"stack": "service-root"})
+
+	amqp = client.New()
 )
 
 func EnableWebhook() error {
@@ -123,6 +127,9 @@ func Start(name string) <-chan error {
 
 	errc := make(chan error)
 	go func() {
+		_, cancel := client.Connect(context.Background(), amqp, "")
+		defer cancel()
+
 		errc <- server.ListenAndServe()
 	}()
 	logger.WithFields(log.Fields{"name": name, "addr": server.Addr}).Info("begin")
