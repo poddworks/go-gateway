@@ -2,22 +2,22 @@
 
 go-shell() {
   project=`basename $(pwd)`
-  docker run -it --rm -v ${PWD}:/go/src/github.com/poddworks/${project} -w /go/src/github.com/poddworks/${project} golang:1-devtools bash
+  docker run -it --rm -v ${local_dir}:/go/src/github.com/poddworks/${project} -w /go/src/github.com/poddworks/${project} golang:1-devtools bash
 }
 
 make() {
   project=`basename $(pwd)`
-  docker run -it --rm -v ${PWD}:/go/src/github.com/poddworks/${project} -w /go/src/github.com/poddworks/${project} golang:1-devtools make ${@}
+  docker run -it --rm -v ${local_dir}:/go/src/github.com/poddworks/${project} -w /go/src/github.com/poddworks/${project} golang:1-devtools make ${@}
 }
 
 dep() {
   project=`basename $(pwd)`
-  docker run -it --rm -v ${PWD}:/go/src/github.com/poddworks/${project} -w /go/src/github.com/poddworks/${project} golang:1-devtools dep ${@}
+  docker run -it --rm -v ${local_dir}:/go/src/github.com/poddworks/${project} -w /go/src/github.com/poddworks/${project} golang:1-devtools dep ${@}
 }
 
 go() {
   project=`basename $(pwd)`
-  docker run -it --rm -v ${PWD}:/go/src/github.com/poddworks/${project} -w /go/src/github.com/poddworks/${project} golang:1-devtools go ${@}
+  docker run -it --rm -v ${local_dir}:/go/src/github.com/poddworks/${project} -w /go/src/github.com/poddworks/${project} golang:1-devtools go ${@}
 }
 
 case $1 in
@@ -33,6 +33,7 @@ RUN curl -fsSL -o /usr/local/bin/dep https://github.com/golang/dep/releases/down
 EOF
     ;;
 *)
+    export local_dir=${1:-$(pwd)}
     # Do nothing, loading as build tool
     ;;
 esac
