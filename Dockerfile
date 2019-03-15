@@ -1,7 +1,11 @@
-FROM scratch
+FROM alpine
 MAINTAINER YI-HUNG JEN <yihungjen@gmail.com>
 
-COPY ca-certificates.crt /etc/ssl/certs/
-COPY gateway-api-Linux-x86_64 /gateway-api
-ENTRYPOINT ["/gateway-api"]
+RUN apk --no-cache add ca-certificates
+
+COPY go-gateway-linux-x86_64 /go-gateway
+
+EXPOSE 8080
+
+ENTRYPOINT ["/go-gateway"]
 CMD ["--help"]

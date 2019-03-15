@@ -1,9 +1,12 @@
-.PHONY: all clean config linux-static linux darwin-static darwin
+.PHONY: all clean docker config linux-static linux darwin-static darwin
 
 all: darwin linux
 
 clean:
 	rm -f go-gateway-*
+
+docker: linux-static
+	docker build -t poddworks/go-gateway:latest .
 
 GIT_HASH := $(shell git rev-parse --short HEAD)
 GO_VER := $(shell go version | cut -d ' ' -f 3)
