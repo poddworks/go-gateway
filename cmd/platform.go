@@ -23,23 +23,32 @@ func main() {
 	app.Version = VersionString
 	app.Description = DescriptionString
 
+	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name:   "endpoint-amqp",
+			Usage:  "Specify URI to AMQP (https://www.rabbitmq.com/uri-spec.html)",
+			EnvVar: "ENDPOINT_AMQP",
+			Value:  "amqp://localhost",
+		},
+	}
+
 	app.Before = func(c *cli.Context) error {
-		if err := Init(); err != nil {
+		if err := Init(c); err != nil {
 			return err // setup failure, cannot bootstrap HTTP server and mux
 		}
 
 		// based on command line option/flag, turn on storage support
-		if err := EnableStore(); err != nil {
+		if err := EnableStore(c); err != nil {
 			return err // setup failure, cannot enable storage
 		}
 
 		// based on command line option/flag, turn on webhook support
-		if err := EnableWebhook(); err != nil {
+		if err := EnableWebhook(c); err != nil {
 			return err // setup failure, cannot enable webhook
 		}
 
 		// based on command line option/flag, turn on function support
-		if err := EnableFunction(); err != nil {
+		if err := EnableFunction(c); err != nil {
 			return err // setup failure, cannot enable function
 		}
 
@@ -53,7 +62,7 @@ func main() {
 		}
 
 		// launch gateway api service
-		errc := Start(c.App.Name)
+		errc := Start(c)
 
 		// report error if there are any
 		logger.Errorln(<-errc)

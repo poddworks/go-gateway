@@ -2,17 +2,14 @@ package gateway
 
 import (
 	"context"
-	"fmt"
-	"io/ioutil"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/gorilla/mux"
-	. "github.com/poddworks/go-gateway/gateway-api/message"
 	log "github.com/sirupsen/logrus"
+	cli "github.com/urfave/cli"
 
-	client "github.com/poddworks/go-gateway/gateway-api/rpc/go"
+	AmqpClient "github.com/poddworks/go-gateway/gateway-api/rpc/go"
 )
 
 var (
@@ -21,79 +18,29 @@ var (
 	router *mux.Router
 	logger = log.WithFields(log.Fields{"stack": "service-root"})
 
-	amqp = client.New()
+	client = AmqpClient.New()
 )
 
-func EnableWebhook() error {
+func EnableWebhook(c *cli.Context) error {
 	route := router.PathPrefix("/webhook/")
 	route.Methods("POST").HandlerFunc(notYetImpl)
 	return nil
 }
 
-func EnableStore() error {
+func EnableStore(c *cli.Context) error {
 	sub := router.PathPrefix("/functions/").Subrouter()
 	sub.Methods("POST").Path("/{functionName}").HandlerFunc(notYetImpl)
 	return nil
 }
 
-func EnableFunction() error {
+func EnableFunction(c *cli.Context) error {
 	sub := router.PathPrefix("/classes/").Subrouter()
 	sub.Methods("GET", "POST").Path("/{className}").HandlerFunc(notYetImpl)
 	sub.Methods("GET", "PUT", "DELETE").Path("/{className}/{objectId}").HandlerFunc(notYetImpl)
 	return nil
 }
 
-func loggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		logger.WithFields(log.Fields{"request": r.Context().Value(MessageCtxString)}).Debug("request-log")
-		next.ServeHTTP(w, r)
-	})
-}
-
-func bodyMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := r.ParseForm(); err != nil {
-			http.Error(w, fmt.Sprint("error/invalid-request/", err.Error()), 400)
-			return
-		}
-		var query = url.Values{}
-		if r.Form != nil {
-			for key, vals := range r.Form {
-				for _, val := range vals {
-					query.Add(key, val)
-				}
-			}
-		}
-		if r.PostForm != nil {
-			for key, vals := range r.PostForm {
-				for _, val := range vals {
-					query.Add(key, val)
-				}
-			}
-		}
-		message := &Message{
-			Method:          r.Method,
-			Host:            r.Host,
-			RemoteAddr:      r.RemoteAddr,
-			Header:          r.Header,
-			QueryParameters: query,
-			PathParameters:  mux.Vars(r),
-		}
-		if r.Body != nil {
-			content, err := ioutil.ReadAll(r.Body)
-			if err != nil {
-				http.Error(w, fmt.Sprint("error/invalid-request/", err.Error()), 400)
-				return
-			}
-
-			message.Body = content
-		}
-		ctx := context.WithValue(r.Context(), MessageCtxString, message)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
-func Init() error {
+func Init(c *cli.Context) error {
 	// Shoudl be configured via command line args
 	log.SetLevel(log.DebugLevel)
 
@@ -121,17 +68,23 @@ func Init() error {
 	return nil
 }
 
-func Start(name string) <-chan error {
+func Start(c *cli.Context) <-chan error {
 	// Attach Catch All handler
 	router.PathPrefix("/").HandlerFunc(notSupported)
 
 	errc := make(chan error)
 	go func() {
-		_, cancel := client.Connect(context.Background(), amqp, "")
+		_, cancel := AmqpClient.Connect(context.Background(), client, c.String("endpoint-amqp"))
 		defer cancel()
 
 		errc <- server.ListenAndServe()
 	}()
-	logger.WithFields(log.Fields{"name": name, "addr": server.Addr}).Info("begin")
+	logger.WithFields(log.Fields{"name": c.App.Name, "addr": server.Addr}).Info("begin")
+	for _, flag := range c.App.VisibleFlags() {
+		var field string = flag.GetName()
+		if field != "help, h" && field != "version, v" {
+			logger.WithFields(log.Fields{"value": c.String(field)}).Debug(field)
+		}
+	}
 	return errc
 }

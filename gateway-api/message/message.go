@@ -10,6 +10,10 @@ const (
 )
 
 type Message struct {
+	// Request ID for the this transaction, used in tracing
+	//
+	RequestId string `json:"-,"`
+
 	// Method specifies the HTTP method (GET, POST, PUT, etc.).
 	//
 	Method string `json:"-,"`

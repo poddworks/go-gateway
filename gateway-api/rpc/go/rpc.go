@@ -48,12 +48,14 @@ func doConnect(endpoint string) (<-chan *Channel, <-chan error) {
 		if err != nil {
 			// TODO: report error status with logger
 			errorCh <- err
+			return
 		}
 
 		channel, err = connection.Channel()
 		if err != nil {
 			// TODO: report error status with logger
 			errorCh <- err
+			return
 		}
 
 		channelCh <- channel
