@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 
 	. "github.com/poddworks/go-gateway/cli"
@@ -8,10 +9,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	cli "github.com/urfave/cli"
-)
-
-var (
-	logger = log.WithFields(log.Fields{"stack": "main"})
 )
 
 func main() {
@@ -61,11 +58,28 @@ func main() {
 			return
 		}
 
-		// launch gateway api service
-		errc := Start(c)
+		var logger = log.WithFields(log.Fields{"stack": "main"})
 
-		// report error if there are any
-		logger.Errorln(<-errc)
+		root, cancel := context.WithCancel(context.Background())
+
+		errc, errw := Start(root, c), StartWorker(root, c)
+		for errc != nil && errw != nil {
+			select {
+			case err := <-errc:
+				errc = nil
+				if err != nil {
+					logger.WithFields(log.Fields{"error": err}).Error("Start")
+				}
+
+			case err := <-errw:
+				errw = nil
+				if err != nil {
+					logger.WithFields(log.Fields{"error": err}).Error("StartWorker")
+				}
+			}
+
+			cancel() // if the error channel reported from any party, we halt
+		}
 	}
 
 	app.Run(os.Args)

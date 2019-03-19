@@ -5,10 +5,6 @@ import (
 	"net/url"
 )
 
-const (
-	MessageCtxString string = "Message"
-)
-
 type Message struct {
 	// Request ID for the this transaction, used in tracing
 	//

@@ -4,16 +4,26 @@ import (
 	"context"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
+	log "github.com/sirupsen/logrus"
+
+	. "github.com/poddworks/go-gateway/gateway-api/constant"
 	. "github.com/poddworks/go-gateway/gateway-api/message"
 	. "github.com/streadway/amqp"
+)
+
+const (
+	MaxConnectRetryDelay = 2 * time.Second
 )
 
 type AmqpClient struct {
 	channelCh  chan *Channel
 	retryCh    chan bool
 	registerCh chan *stateInfoRequest
+
+	logger *log.Entry
 }
 
 type MessageRpc struct {
@@ -33,7 +43,7 @@ type stateInfoRequest struct {
 	tag         string
 }
 
-func doConnect(endpoint string) (<-chan *Channel, <-chan error) {
+func doConnect(logger *log.Entry, endpoint string) (<-chan *Channel, <-chan error) {
 	var (
 		connection *Connection
 		channel    *Channel
@@ -46,14 +56,12 @@ func doConnect(endpoint string) (<-chan *Channel, <-chan error) {
 	go func() {
 		connection, err = Dial(endpoint)
 		if err != nil {
-			// TODO: report error status with logger
 			errorCh <- err
 			return
 		}
 
 		channel, err = connection.Channel()
 		if err != nil {
-			// TODO: report error status with logger
 			errorCh <- err
 			return
 		}
@@ -64,6 +72,7 @@ func doConnect(endpoint string) (<-chan *Channel, <-chan error) {
 }
 
 func Connect(ctx context.Context, client *AmqpClient, endpoint string) (context.Context, context.CancelFunc) {
+	var logger = ctx.Value(LoggingCtxString).(*log.Entry)
 	wrapped, cancel := context.WithCancel(ctx)
 	go func() {
 		var (
@@ -76,20 +85,25 @@ func Connect(ctx context.Context, client *AmqpClient, endpoint string) (context.
 				return // termination by cancel or interruption
 
 			case <-client.retryCh:
-				channelCh, errorCh = doConnect(endpoint)
+				channelCh, errorCh = doConnect(logger, endpoint)
 			}
 
+			logger.Debug("Connect")
 			select {
 			case <-ctx.Done():
 				return // termination by cancel or interruption
 
 			case err := <-errorCh:
 				if err != nil {
-					// TODO: report error status with logger
-					client.retryCh <- true
+					logger.WithFields(log.Fields{"error": err}).Error("Connect")
+					go func() {
+						<-time.After(MaxConnectRetryDelay)
+						client.retryCh <- true
+					}()
 				}
 
 			case channel := <-channelCh:
+				logger.Debug("Connect-channel")
 				client.channelCh <- channel
 			}
 		}
@@ -107,27 +121,37 @@ func New() *AmqpClient {
 }
 
 func (client *AmqpClient) start(ctx context.Context) {
+	client.logger = ctx.Value(LoggingCtxString).(*log.Entry)
 	client.retryCh <- true
 	go func() {
 		var (
-			stateInfos map[string]*stateInfoRequest
+			stateInfos = make(map[string]*stateInfoRequest)
 			channel    *Channel
 
 			errorCh = make(chan *Error)
 		)
 		for {
+			<-time.After(MaxConnectRetryDelay)
+			client.logger.Debug("start")
 			select {
 			case <-ctx.Done():
 				return // termination by cancel or interruption
 
-			case err := <-errorCh:
+			case err, ok := <-errorCh:
+				if ok {
+					errorCh = make(chan *Error)
+				}
 				if err != nil {
-					// TODO: report error status with logger
+					client.logger.WithFields(log.Fields{"error": err}).Error("start")
 					channel = nil
-					client.retryCh <- true
+					go func() {
+						<-time.After(MaxConnectRetryDelay)
+						client.retryCh <- true
+					}()
 				}
 
 			case recvr := <-client.registerCh:
+				client.logger.WithFields(log.Fields{"method": recvr.method, "tag": recvr.tag}).Debug("start-channel-acquired")
 				if recvr.method == "POST" {
 					stateInfos[recvr.tag] = recvr
 					go func() {
@@ -143,6 +167,7 @@ func (client *AmqpClient) start(ctx context.Context) {
 			case channel = <-client.channelCh:
 				// Received new channel from connect establish, broadcast to
 				// all stateInfos to this client
+				client.logger.Debug("start-channel-acquired")
 				channel.NotifyClose(errorCh)
 				go func() {
 					for _, recvr := range stateInfos {
@@ -192,6 +217,8 @@ func (client *AmqpClient) Each(ctx context.Context) <-chan *MessageRpc {
 			}
 
 			errorCh = make(chan error)
+
+			logger = client.logger.WithFields(log.Fields{"tag": request.tag})
 		)
 
 		// Register stateInfo for channel update
@@ -212,7 +239,7 @@ func (client *AmqpClient) Each(ctx context.Context) <-chan *MessageRpc {
 
 			case err := <-errorCh:
 				if err != nil {
-					// TODO: report error status with logger
+					logger.WithFields(log.Fields{"error": err}).Error("Each")
 				}
 
 			case state := <-request.stateInfoCh:
@@ -233,8 +260,10 @@ func (client *AmqpClient) Each(ctx context.Context) <-chan *MessageRpc {
 					// TODO: Implement logic for consume
 					//
 
+					logger.Debug("Each-register >> state")
+
 					// QueueDeclare(name string, durable, autoDelete, exclusive, noWait bool, args Table)
-					queue, err = channel.QueueDeclare("", true, false, false, true, nil)
+					queue, err = channel.QueueDeclare("", true, true, false, true, nil)
 					if err != nil {
 						// Channel will be closed.
 						errorCh <- err
