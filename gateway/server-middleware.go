@@ -10,8 +10,27 @@ import (
 	"github.com/gorilla/mux"
 	. "github.com/poddworks/go-gateway/gateway-api/constant"
 	. "github.com/poddworks/go-gateway/gateway-api/message"
+	. "github.com/poddworks/go-gateway/gateway-api/types"
 	log "github.com/sirupsen/logrus"
 )
+
+func buildCommitRequest(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		message := r.Context().Value(MessageCtxString).(*Message)
+
+		request := &CommitRequest{
+			Exchange:   &ExchangeRequest{},
+			RoutingKey: "",
+			Payload: &Payload{
+				ContentType: "application/json",
+				Content:     message,
+			},
+		}
+
+		ctx := context.WithValue(r.Context(), CommitCtxString, request)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
 
 func bodyMiddleware(next http.Handler) http.Handler {
 	var logger = log.WithFields(log.Fields{"stack": "http-parser"})

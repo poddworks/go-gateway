@@ -20,6 +20,10 @@ func requestId() string {
 	return <-generateCh
 }
 
+func unexpectedError(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, "error/unexpected-error", 500)
+}
+
 func notYetImpl(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "error/not-yet-implemented", 400)
 }

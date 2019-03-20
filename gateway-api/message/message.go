@@ -8,11 +8,11 @@ import (
 type Message struct {
 	// Request ID for the this transaction, used in tracing
 	//
-	RequestId string `json:"-,"`
+	RequestId string `json:"requestId"`
 
 	// Method specifies the HTTP method (GET, POST, PUT, etc.).
 	//
-	Method string `json:"-,"`
+	Method string `json:"method"`
 
 	// For server requests Host specifies the host on which the URL
 	// is sought. Per RFC 7230, section 5.4, this is either the value
@@ -22,29 +22,29 @@ type Message struct {
 	// golang.org/x/net/idna to convert it to either format if
 	// needed.
 	//
-	Host string `json:"-,omitempty"`
+	Host string `json:"host,omitempty"`
 
 	// RemoteAddr allows HTTP servers and other software to record
 	// the network address that sent the request.
 	//
-	RemoteAddr string `json:"-,omitempty"`
+	RemoteAddr string `json:"remote_addr,omitempty"`
 
 	// Header contains the request header fields either received
 	// by the server.
 	//
-	Header http.Header `json:"-,"`
+	Header http.Header `json:"header"`
 
 	// QueryParameters contains the request query arguments fields received
 	// by the server.
 	//
-	QueryParameters url.Values `json:"-,"`
+	QueryParameters url.Values `json:"query_params"`
 
 	// QueryParameters contains the request query arguments fields received
 	// by the server.
 	//
-	PathParameters map[string]string `json:"-,"`
+	PathParameters map[string]string `json:"path_params"`
 
 	// Body is the request's body.
 	//
-	Body []byte `json:"-,"`
+	Body []byte `json:"body,omitempty"`
 }

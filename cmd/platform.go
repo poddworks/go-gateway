@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"time"
 
 	. "github.com/poddworks/go-gateway/cli"
 	. "github.com/poddworks/go-gateway/gateway"
@@ -22,10 +24,27 @@ func main() {
 
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
-			Name:   "endpoint-amqp",
+			Name:   "task-id",
+			Usage:  "Specify a task id for the API worker, default to Unix timestamp of the time service is launched",
+			EnvVar: "GATEWAY_TASK_ID",
+			Value:  fmt.Sprintf("%v-%v", AppNameString, time.Now().Unix()),
+		},
+		cli.StringFlag{
+			Name:   "amqp-endpoint",
 			Usage:  "Specify URI to AMQP (https://www.rabbitmq.com/uri-spec.html)",
-			EnvVar: "ENDPOINT_AMQP",
+			EnvVar: "GATEWAY_ENDPOINT_AMQP",
 			Value:  "amqp://localhost",
+		},
+		cli.UintFlag{
+			Name:   "amqp-qos-prefetch",
+			Usage:  "Specify AMQP client prefetch count",
+			EnvVar: "GATEWAY_ENDPOINT_AMQP_QOS_PREFETCH",
+			Value:  25,
+		},
+		cli.BoolFlag{
+			Name:   "amqp-qos-global",
+			Usage:  "Specify AMQP client QoS settings to all existing and future consumers on all channels on the same connection",
+			EnvVar: "GATEWAY_ENDPOINT_AMQP_QOS_GLOBAL",
 		},
 	}
 
@@ -62,11 +81,17 @@ func main() {
 
 		root, cancel := context.WithCancel(context.Background())
 
-		errc, errw := Start(root, c), StartWorker(root, c)
-		for errc != nil && errw != nil {
+		errc, errs, errw := ConnectSetup(root, c), Start(root, c), StartWorker(root, c)
+		for errc != nil || errs != nil || errw != nil {
 			select {
 			case err := <-errc:
 				errc = nil
+				if err != nil {
+					logger.WithFields(log.Fields{"error": err}).Error("Connect")
+				}
+
+			case err := <-errs:
+				errs = nil
 				if err != nil {
 					logger.WithFields(log.Fields{"error": err}).Error("Start")
 				}
@@ -78,7 +103,7 @@ func main() {
 				}
 			}
 
-			cancel() // if the error channel reported from any party, we halt
+			cancel() // Cancel current context to notify halt
 		}
 	}
 

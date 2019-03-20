@@ -31,3 +31,6 @@ _testmain.go
 
 # Golang dep vendor
 /vendor
+
+# Golang output binary
+go-gateway-*
