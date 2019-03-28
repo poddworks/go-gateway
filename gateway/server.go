@@ -61,15 +61,70 @@ func EnableWebhook(c *cli.Context) error {
 }
 
 func EnableStore(c *cli.Context) error {
-	sub := router.PathPrefix("/functions/").Subrouter()
-	sub.Methods("POST").Path("/{functionName}").HandlerFunc(notYetImpl)
+	var (
+		ExchangeForPublish = fmt.Sprintf("%v-forward-exchange", c.App.Name)
+		ExchangeForReply   = fmt.Sprintf("%v-reply-exchange", c.App.Name)
+
+		CorrelationId = fmt.Sprintf("%v", c.String("task-id"))
+	)
+
+	sub := router.PathPrefix("/classes/").Subrouter()
+
+	sub.Use(buildCommitRequest, buildPublishAction(
+		func(ctx context.Context) error {
+			message := ctx.Value(MessageCtxString).(*Message)
+			request := ctx.Value(CommitCtxString).(*CommitRequest)
+
+			// request destination
+			if objectId, ok := message.PathParameters["objectId"]; ok {
+				routingKey := fmt.Sprintf("classes.%v.%v.%v", message.PathParameters["className"], objectId, message.Method)
+				request.SetRoutingKey(routingKey).SetExchange(ExchangeForPublish)
+			} else {
+				routingKey := fmt.Sprintf("classes.%v.%v", message.PathParameters["className"], message.Method)
+				request.SetRoutingKey(routingKey).SetExchange(ExchangeForPublish)
+			}
+
+			// request reply address
+			request.ReplyTo(ExchangeForReply).CorrelationId(CorrelationId)
+
+			return nil
+		},
+	))
+
+	sub.Methods("GET", "POST").Path("/{className}").HandlerFunc(buildResponse)
+	sub.Methods("GET", "PUT", "DELETE").Path("/{className}/{objectId}").HandlerFunc(buildResponse)
+
 	return nil
 }
 
 func EnableFunction(c *cli.Context) error {
-	sub := router.PathPrefix("/classes/").Subrouter()
-	sub.Methods("GET", "POST").Path("/{className}").HandlerFunc(notYetImpl)
-	sub.Methods("GET", "PUT", "DELETE").Path("/{className}/{objectId}").HandlerFunc(notYetImpl)
+	var (
+		ExchangeForPublish = fmt.Sprintf("%v-forward-exchange", c.App.Name)
+		ExchangeForReply   = fmt.Sprintf("%v-reply-exchange", c.App.Name)
+
+		CorrelationId = fmt.Sprintf("%v", c.String("task-id"))
+	)
+
+	sub := router.PathPrefix("/functions/").Subrouter()
+
+	sub.Use(buildCommitRequest, buildPublishAction(
+		func(ctx context.Context) error {
+			message := ctx.Value(MessageCtxString).(*Message)
+			request := ctx.Value(CommitCtxString).(*CommitRequest)
+
+			// request destination
+			routingKey := fmt.Sprintf("functions.%v", message.PathParameters["functionName"])
+			request.SetRoutingKey(routingKey).SetExchange(ExchangeForPublish)
+
+			// request reply address
+			request.ReplyTo(ExchangeForReply).CorrelationId(CorrelationId)
+
+			return nil
+		},
+	))
+
+	sub.Methods("POST").Path("/{functionName}").HandlerFunc(buildResponse)
+
 	return nil
 }
 
