@@ -14,8 +14,13 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	. "github.com/poddworks/go-gateway/gateway-api/constant"
+	. "github.com/poddworks/go-gateway/gateway-api/message"
 	. "github.com/poddworks/go-gateway/gateway-api/types"
 	. "github.com/streadway/amqp"
+)
+
+const (
+	GatewayRequestReplyKey = "x-gateway-request-id"
 )
 
 var (
@@ -219,6 +224,7 @@ func checkCommitRequest(request *CommitRequest) error {
 			return errors.New("error/invalid-argument-nil-CommitRequest")
 		}
 	}
+	pendingCommitRequest.Set(request)
 	return nil
 }
 
@@ -282,6 +288,10 @@ func doCommit(ctx context.Context, channel *Channel) (chan<- *CommitRequest, <-c
 	return availableCh, errorCh
 }
 
+func (client *AmqpClient) PendingRequests() PendingCommitRequest {
+	return pendingCommitRequest
+}
+
 func (client *AmqpClient) Commit(ctx context.Context) chan<- *CommitRequest {
 	publishCh := make(chan *CommitRequest)
 
@@ -325,11 +335,11 @@ func (client *AmqpClient) Commit(ctx context.Context) chan<- *CommitRequest {
 							channel = state.channel
 
 						case message, ok := <-publishCh:
-							if message != nil {
+							if message != nil && !message.Deadline() {
 								if checkCommitRequest(message) == nil {
 									buffer = append(buffer, message)
-									logger.WithFields(log.Fields{"buffer-size": len(buffer), "pending-size": len(pending)}).Debug("Commit-buffer-1")
 								}
+								logger.WithFields(log.Fields{"buffer-size": len(buffer), "pending-size": len(pending), "deadline": message.Deadline()}).Debug("Commit-buffer-1")
 							}
 							if !ok {
 								publishCh = nil
@@ -362,11 +372,11 @@ func (client *AmqpClient) Commit(ctx context.Context) chan<- *CommitRequest {
 							}
 
 						case message, ok := <-publishCh:
-							if message != nil {
+							if message != nil && !message.Deadline() {
 								if checkCommitRequest(message) == nil {
 									buffer = append(buffer, message)
-									logger.WithFields(log.Fields{"buffer-size": len(buffer), "pending-size": len(pending)}).Debug("Commit-buffer-2")
 								}
+								logger.WithFields(log.Fields{"buffer-size": len(buffer), "pending-size": len(pending), "deadline": message.Deadline()}).Debug("Commit-buffer-2")
 							}
 							if !ok {
 								publishCh = nil
@@ -511,19 +521,16 @@ func (client *AmqpClient) Each(ctx context.Context, opts *SubscriptionRequest) (
 									if !ok {
 										return // channel had been terminated
 									}
-									subscription <- &MessageRpc{
-										Payload: &Payload{
-											Headers:         delivery.Headers,
-											ContentType:     delivery.ContentType,
-											ContentEncoding: delivery.ContentEncoding,
-											CorrelationId:   delivery.CorrelationId,
-											ReplyTo:         delivery.ReplyTo,
-											Content:         nil,
-										},
-
-										acknowledger: delivery.Acknowledger,
-										tag:          delivery.DeliveryTag,
+									requestId, trr := delivery.Headers[GatewayRequestReplyKey].(string)
+									if !trr {
+										requestId = ""
 									}
+									content := &Message{
+										RequestId: requestId,
+										Body:      delivery.Body,
+									}
+									payload := &Payload{delivery.Headers, delivery.ContentType, delivery.ContentEncoding, delivery.CorrelationId, delivery.ReplyTo, content}
+									subscription <- NewMessageRpc(delivery.Acknowledger, delivery.DeliveryTag, payload)
 								}
 							}
 						}()

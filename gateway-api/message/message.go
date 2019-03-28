@@ -8,7 +8,7 @@ import (
 type Message struct {
 	// Request ID for the this transaction, used in tracing
 	//
-	RequestId string `json:"requestId"`
+	RequestId string `json:"request_id"`
 
 	// Method specifies the HTTP method (GET, POST, PUT, etc.).
 	//

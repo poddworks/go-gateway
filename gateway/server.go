@@ -38,26 +38,24 @@ func EnableWebhook(c *cli.Context) error {
 	)
 
 	sub := router.PathPrefix("/webhook/").Subrouter()
-	sub.Use(buildCommitRequest)
-	sub.Methods("POST").Path("/{endpoint}").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		message := r.Context().Value(MessageCtxString).(*Message)
-		request := r.Context().Value(CommitCtxString).(*CommitRequest)
 
-		var Key = fmt.Sprintf("webhook.%v", message.PathParameters["endpoint"])
+	sub.Use(buildCommitRequest, buildPublishAction(
+		func(ctx context.Context) error {
+			message := ctx.Value(MessageCtxString).(*Message)
+			request := ctx.Value(CommitCtxString).(*CommitRequest)
 
-		// Customize request destination
-		request.SetExchange(ExchangeForPublish).SetRoutingKey(Key)
+			// request destination
+			request.SetRoutingKey(fmt.Sprintf("webhook.%v", message.PathParameters["endpoint"])).
+				SetExchange(ExchangeForPublish)
 
-		// Customize reply address
-		request.ReplyTo(ExchangeForReply).CorrelationId(CorrelationId)
+			// request reply address
+			request.ReplyTo(ExchangeForReply).CorrelationId(CorrelationId)
 
-		// Submit and Register reply feedback
-		publishCh <- request
-		// TODO: register reply feedback
+			return nil
+		},
+	))
 
-		notYetImpl(w, r)
-		return
-	})
+	sub.Methods("POST").Path("/{endpoint}").HandlerFunc(buildResponse)
 
 	return nil
 }
@@ -93,7 +91,7 @@ func Init(c *cli.Context) error {
 		ReadHeaderTimeout: 100 * time.Millisecond,
 		ReadTimeout:       1 * time.Second,
 
-		WriteTimeout: 1 * time.Second,
+		WriteTimeout: 120 * time.Second,
 
 		IdleTimeout: 120 ^ time.Second,
 
@@ -179,6 +177,8 @@ func StartWorker(root context.Context, c *cli.Context) <-chan error {
 		RoutingKey       = fmt.Sprintf("%v", c.String("task-id"))
 	)
 
+	pending := client.PendingRequests()
+
 	subscription := client.Subscribe(root, &SubscriptionRequest{
 		Queue: &QueueRequest{
 			AutoDelete: true,
@@ -211,6 +211,10 @@ func StartWorker(root context.Context, c *cli.Context) <-chan error {
 				defer wait.Done()
 				for message := range streamC {
 					logger.WithFields(log.Fields{"message": message.Payload}).Debug("StartWorker-subscription")
+					message.Ack(false)
+					if request := pending.Once(message.RequestId()); request != nil {
+						request.Incoming() <- message.Payload
+					}
 				}
 			}()
 		}

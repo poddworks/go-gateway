@@ -1,6 +1,10 @@
 package types
 
 import (
+	"bytes"
+	"context"
+	"time"
+
 	. "github.com/poddworks/go-gateway/gateway-api/message"
 	. "github.com/streadway/amqp"
 )
@@ -73,6 +77,10 @@ type Payload struct {
 	Content         *Message
 }
 
+func (p *Payload) NewReader() *bytes.Reader {
+	return bytes.NewReader(p.Content.Body)
+}
+
 type CommitRequest struct {
 	// Queue to send to, exclusive to Exchange + RoutingKey
 	Queue *QueueRequest
@@ -83,6 +91,33 @@ type CommitRequest struct {
 
 	// Embedding Payload
 	*Payload
+
+	// Embedding ReplyAddr
+	*ReplyAddr
+}
+
+func (r *CommitRequest) Timeout() <-chan struct{} {
+	return r.ReplyAddr.Context.Done()
+}
+
+func (r *CommitRequest) Reply() <-chan *Payload {
+	return r.ReplyAddr.Reply
+}
+
+func (r *CommitRequest) Incoming() chan<- *Payload {
+	return r.ReplyAddr.Reply
+}
+
+func (r *CommitRequest) Deadline() bool {
+	deadline, ok := r.ReplyAddr.Context.Deadline()
+	if !ok {
+		return false
+	}
+	return deadline.Before(time.Now())
+}
+
+func (r *CommitRequest) RequestId() string {
+	return r.ReplyAddr.RequestId
 }
 
 func (r *CommitRequest) SetQueue(name string) *CommitRequest {
@@ -139,4 +174,39 @@ func (r *CommitRequest) ReplyTo(val string) *CommitRequest {
 		r.Payload.ReplyTo = val
 	}
 	return r
+}
+
+type ReplyAddr struct {
+	RequestId string
+
+	Context context.Context
+	Reply   chan *Payload
+}
+
+type MessageRpc struct {
+	acknowledger Acknowledger
+	tag          uint64
+
+	// Embedding Payload
+	*Payload
+}
+
+func NewMessageRpc(acknowledger Acknowledger, tag uint64, payload *Payload) *MessageRpc {
+	return &MessageRpc{acknowledger, tag, payload}
+}
+
+func (m *MessageRpc) RequestId() string {
+	return m.Payload.Content.RequestId
+}
+
+func (m *MessageRpc) Ack(multiple bool) error {
+	return m.acknowledger.Ack(m.tag, multiple)
+}
+
+func (m *MessageRpc) Nack(multiple, requeue bool) error {
+	return m.acknowledger.Nack(m.tag, multiple, requeue)
+}
+
+func (m *MessageRpc) Reject(requeue bool) error {
+	return m.acknowledger.Reject(m.tag, requeue)
 }

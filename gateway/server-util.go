@@ -31,3 +31,7 @@ func notYetImpl(w http.ResponseWriter, r *http.Request) {
 func notSupported(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "error/not-supported", 400)
 }
+
+func requestTimeout(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, "error/request-timeout", 408)
+}
