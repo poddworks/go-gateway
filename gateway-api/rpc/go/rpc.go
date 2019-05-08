@@ -220,7 +220,9 @@ func checkCommitRequest(request *CommitRequest) error {
 			return errors.New("error/invalid-argument-nil-CommitRequest")
 		}
 	}
-	pendingCommitRequest.Set(request)
+	if request.ReplyAddr != nil {
+		pendingCommitRequest.Set(request)
+	}
 	return nil
 }
 

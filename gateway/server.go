@@ -129,7 +129,7 @@ func EnableFunction(c *cli.Context) error {
 }
 
 func Init(c *cli.Context) error {
-	// Shoudl be configured via command line args
+	// TODO: Should be configured via command line args
 	log.SetLevel(log.DebugLevel)
 
 	router = mux.NewRouter()

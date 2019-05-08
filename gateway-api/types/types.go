@@ -112,23 +112,35 @@ type CommitRequest struct {
 }
 
 func (r *CommitRequest) Timeout() <-chan struct{} {
-	return r.ReplyAddr.Context.Done()
+	if r.ReplyAddr != nil {
+		return r.ReplyAddr.Context.Done()
+	}
+	return nil
 }
 
 func (r *CommitRequest) Reply() <-chan *Payload {
-	return r.ReplyAddr.Reply
+	if r.ReplyAddr != nil {
+		return r.ReplyAddr.Reply
+	}
+	return nil
 }
 
 func (r *CommitRequest) Incoming() chan<- *Payload {
-	return r.ReplyAddr.Reply
+	if r.ReplyAddr != nil {
+		return r.ReplyAddr.Reply
+	}
+	return nil
 }
 
 func (r *CommitRequest) Deadline() bool {
-	deadline, ok := r.ReplyAddr.Context.Deadline()
-	if !ok {
-		return false
+	if r.ReplyAddr != nil {
+		deadline, ok := r.ReplyAddr.Context.Deadline()
+		if !ok {
+			return false
+		}
+		return deadline.Before(time.Now())
 	}
-	return deadline.Before(time.Now())
+	return false
 }
 
 func (r *CommitRequest) RequestId() string {
@@ -205,6 +217,14 @@ func NewMessageRpc(acknowledger Acknowledger, tag uint64, payload *Payload) *Mes
 
 func (m *MessageRpc) RequestId() string {
 	return m.Payload.Content.RequestId
+}
+
+func (m *MessageRpc) CorrelationId() string {
+	return m.Payload.CorrelationId
+}
+
+func (m *MessageRpc) ReplyTo() string {
+	return m.Payload.ReplyTo
 }
 
 func (m *MessageRpc) Ack(multiple bool) error {
