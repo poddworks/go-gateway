@@ -132,14 +132,8 @@ func buildPublishAction(customize func(ctx context.Context) error) func(http.Han
 }
 
 func buildResponseHeader(w http.ResponseWriter, payload *Payload) {
-	for key, val := range payload.Headers {
-		w.Header().Add(key, val.(string))
-	}
-	if payload.ContentType != "" {
-		w.Header().Add("Content-Type", payload.ContentType)
-	}
-	if payload.ContentEncoding != "" {
-		w.Header().Add("Content-Encoding", payload.ContentEncoding)
+	for key := range payload.Content.Header {
+		w.Header().Set(key, payload.Content.Header.Get(key))
 	}
 }
 

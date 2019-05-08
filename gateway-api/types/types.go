@@ -77,8 +77,23 @@ type Payload struct {
 	Content         *Message
 }
 
+func NewPayload(contentType string, content *Message) *Payload {
+	return &Payload{Headers: Table{}, ContentType: contentType, Content: content}
+}
+
 func (p *Payload) NewReader() *bytes.Reader {
 	return bytes.NewReader(p.Content.Body)
+}
+
+type ReplyAddr struct {
+	RequestId string
+
+	Context context.Context
+	Reply   chan *Payload
+}
+
+func NewReplyAddr(requestId string, ctx context.Context) *ReplyAddr {
+	return &ReplyAddr{RequestId: requestId, Context: ctx, Reply: make(chan *Payload, 1)}
 }
 
 type CommitRequest struct {
@@ -141,9 +156,9 @@ func (r *CommitRequest) SetRoutingKey(key string) *CommitRequest {
 	return r
 }
 
-func (r *CommitRequest) Headers(val Table) *CommitRequest {
+func (r *CommitRequest) Add(key string, val interface{}) *CommitRequest {
 	if r.Payload != nil {
-		r.Payload.Headers = val
+		r.Payload.Headers[key] = val
 	}
 	return r
 }
@@ -174,13 +189,6 @@ func (r *CommitRequest) ReplyTo(val string) *CommitRequest {
 		r.Payload.ReplyTo = val
 	}
 	return r
-}
-
-type ReplyAddr struct {
-	RequestId string
-
-	Context context.Context
-	Reply   chan *Payload
 }
 
 type MessageRpc struct {

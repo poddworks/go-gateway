@@ -19,10 +19,6 @@ import (
 	. "github.com/streadway/amqp"
 )
 
-const (
-	GatewayRequestReplyKey = "x-gateway-request-id"
-)
-
 var (
 	DefaultMessageTTL = fmt.Sprintf("%d", (30*time.Second)/time.Millisecond)
 )
@@ -521,16 +517,20 @@ func (client *AmqpClient) Each(ctx context.Context, opts *SubscriptionRequest) (
 									if !ok {
 										return // channel had been terminated
 									}
-									requestId, trr := delivery.Headers[GatewayRequestReplyKey].(string)
-									if !trr {
-										requestId = ""
+									payload := &Payload{delivery.Headers, delivery.ContentType, delivery.ContentEncoding, delivery.CorrelationId, delivery.ReplyTo, &Message{}}
+									event := NewMessageRpc(delivery.Acknowledger, delivery.DeliveryTag, payload)
+									if delivery.ContentType != "application/json" {
+										logger.WithFields(log.Fields{"error": errors.New("error/not-a-valid-transport-content-type")}).Error("Each")
+										event.Reject(false)
+										return
 									}
-									content := &Message{
-										RequestId: requestId,
-										Body:      delivery.Body,
+									if err := json.Unmarshal(delivery.Body, payload.Content); err != nil {
+										logger.WithFields(log.Fields{"error": err}).Error("Each")
+										event.Reject(false)
+										return
 									}
-									payload := &Payload{delivery.Headers, delivery.ContentType, delivery.ContentEncoding, delivery.CorrelationId, delivery.ReplyTo, content}
-									subscription <- NewMessageRpc(delivery.Acknowledger, delivery.DeliveryTag, payload)
+									// notify subscribers of message
+									subscription <- event
 								}
 							}
 						}()
